@@ -1,0 +1,35 @@
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  # Make sure to change this
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    # First we ensure Dependencies are met.
+    - name: Pre-Launch Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ nginxwebserver_namespace }} --ignore-not-found
+      register: nginxwebserver_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Delete Task ... Uninstall Helm Package
+          shell: |
+            helm uninstall "{{ nginxwebserver_label }}" -n "{{ nginxwebserver_namespace }}"
+          ignore_errors: yes
+          args:
+            executable: /bin/bash
+        - name: Delete Task ... Remove secrets
+          shell: |
+            kubectl delete secrets --all -n "{{ nginxwebserver_namespace }}"
+          ignore_errors: yes
+          args:
+            executable: /bin/bash
+        - name: Delete Task ... Remove Namespace
+          shell: |
+            kubectl delete namespace "{{ nginxwebserver_namespace }}"
+          ignore_errors: yes
+          args:
+            executable: /bin/bash
+      when: nginxwebserver_alreadydeployed_check.stdout != ""

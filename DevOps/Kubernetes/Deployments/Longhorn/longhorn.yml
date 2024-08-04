@@ -1,0 +1,27 @@
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  # Make sure to change this
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    - name: Pre-Launch Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ longhorn_namespace }} --ignore-not-found
+      register: longhorn_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Add Longhorn Repo
+          kubernetes.core.helm_repository:
+            name: longhorn
+            repo_url: "{{ longhorn_helm_chart_url }}"
+        - name: Install Longhorn
+          kubernetes.core.helm:
+            name: longhorn
+            namespace: "{{ longhorn_namespace }}"
+            chart_ref: "{{ longhorn_chart_ref }}"
+            wait: true
+            create_namespace: true
+      when: longhorn_alreadydeployed_check.stdout == ""

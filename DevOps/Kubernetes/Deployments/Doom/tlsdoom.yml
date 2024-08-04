@@ -1,0 +1,173 @@
+# Required Dependencies, no error if already installed.
+- import_playbook: ../Metallb/metallb.yml # Loadbalancer
+- import_playbook: ../Nginxingress/nginxingress.yml # Ingress Controller
+- import_playbook: ../Certmanager/certmanager.yml # Auto TLS
+
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  # Make sure to change this
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    # First we ensure Dependencies are met.
+    - name: Pre-Launch Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ doom_namespace }} --ignore-not-found
+      register: doom_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Pre-Launch Task ... Create Doom Namespace
+          shell: |
+            kubectl create namespace "{{ doom_namespace }}"
+          args:
+            executable: /bin/bash
+        - name: Pre-Launch Task ... Create Service account
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: v1
+            kind: ServiceAccount
+            metadata:
+              name: "{{ doom_service_account }}"
+              namespace: "{{ doom_namespace }}"
+            EOF
+          args:
+            executable: /bin/bash
+        - name: Create Doom Role
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: Role
+            metadata:
+              name: doom-role
+              namespace: "{{ doom_namespace }}"
+            rules:
+            - apiGroups: [""]
+              resources: ["pods"]
+              verbs: ["get", "list", "delete", "watch"]
+            EOF
+          args:
+            executable: /bin/bash
+        - name: Create Doom RoleBinding
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: doom-rolebinding
+              namespace: "{{ doom_namespace }}"
+            subjects:
+            - kind: ServiceAccount
+              name: "{{ doom_service_account }}"
+              namespace: "{{ doom_namespace }}"
+            roleRef:
+              kind: Role
+              name: doom-role
+              apiGroup: rbac.authorization.k8s.io
+            EOF
+          args:
+            executable: /bin/bash
+        - name: Pre-Launch Task ... Create Cluster Role Binding
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: "{{ doom_service_account }}"
+            roleRef:
+              apiGroup: rbac.authorization.k8s.io
+              kind: ClusterRole
+              name: cluster-admin
+            subjects:
+              - kind: ServiceAccount
+                name: "{{ doom_service_account }}"
+                namespace: "{{ doom_namespace }}"
+            EOF
+          args:
+            executable: /bin/bash
+        - name: Launch Task ... Install Doom
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: "{{ doom_label }}"
+              namespace: "{{ doom_namespace }}"
+              labels:
+                app: "{{ doom_label }}"
+            spec:
+              replicas: {{ doom_replicas }}
+              selector:
+                matchLabels:
+                  app: "{{ doom_label }}"
+              template:
+                metadata:
+                  labels:
+                    app: "{{ doom_label }}"
+                spec:
+                  serviceAccountName: "{{ doom_service_account }}"
+                  containers:
+                    - image: "{{ doom_image }}"
+                      env:
+                        - name: NAMESPACE
+                          value: nginx-webserver
+                      imagePullPolicy: Always
+                      name: "{{ doom_label }}"
+                      ports:
+                        - containerPort: {{ doom_containerport }}
+                          protocol: TCP
+            EOF
+          args:
+            executable: /bin/bash
+        - name: Launch Task ... Deploy Doom Service
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: "{{ doom_label }}"
+              namespace: "{{ doom_namespace }}"
+            spec:
+              selector:
+                app: "{{ doom_label }}"
+              ports:
+                - port: {{ doom_port }}
+                  protocol: TCP
+                  targetPort: {{ doom_targetport }}
+              type: ClusterIP
+            EOF
+          args:
+            executable: /bin/bash
+        - name: Launch Task ... Deploy Doom Ingress
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: networking.k8s.io/v1
+            kind: Ingress
+            metadata:
+              name: "{{ doom_label }}"
+              namespace: "{{ doom_namespace }}"
+              annotations:
+                cert-manager.io/cluster-issuer: "{{ certmanager_cluster_issuer_name }}"
+            spec:
+              ingressClassName: "{{ globals_ingress_classname }}"
+              tls:
+              - hosts:
+                - "{{ doom_prefix_path }}.{{ doom_primary_domain }}"
+                secretName:  "{{ doom_tls_secretname }}"
+              rules:
+              - host: "{{ doom_prefix_path }}.{{ doom_primary_domain }}"
+                http:
+                  paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: "{{ doom_label }}"
+                        port:
+                          number: {{ doom_port }}
+            EOF
+          args:
+            executable: /bin/bash
+      when: doom_alreadydeployed_check.stdout == ""

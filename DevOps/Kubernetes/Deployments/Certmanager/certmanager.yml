@@ -1,0 +1,85 @@
+# Required Dependencies, no error if already installed.
+- import_playbook: ../Metallb/metallb.yml # Loadbalancer
+- import_playbook: ../Nginxingress/nginxingress.yml # Ingress Controller
+
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  # Make sure to change this
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    # First we ensure Dependencies are met.
+    - name: Pre-Launch Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ certmanager_namespace }} --ignore-not-found
+      register: certmanager_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Pre-Launch Task ... Add Certmanager Repo
+          kubernetes.core.helm_repository:
+            name: "{{ certmanager_chart_name }}"
+            repo_url: "{{ certmanager_helm_chart_url }}"
+        - name: Pre-Launch Task ... Install Certmanager
+          kubernetes.core.helm:
+            name: "{{ certmanager_label }}"
+            namespace: "{{ certmanager_namespace }}"
+            chart_ref: "{{ certmanager_chart_ref }}"
+            create_namespace: true
+            wait: true
+            set_values:
+              - value: crds.enabled=true
+              - value: crds.keep=true
+        - name: Launch Task ... Apply API Secret YML file
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: "{{ certmanager_cloudflare_api_token_secret_name }}"
+              namespace: "{{ certmanager_namespace }}"
+            type: Opaque
+            stringData:
+              api-token: "{{ certmanager_api_token_secret }}"
+            EOF
+          args:
+            executable: /bin/bash
+        - name: Launch Task ... Apply Cluster Issuer YML file
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: cert-manager.io/v1
+            kind: ClusterIssuer
+            metadata:
+              name: "{{ certmanager_cluster_issuer_name }}" # Use this when matching with ingress
+              namespace: "{{ certmanager_namespace }}"
+            spec:
+              acme:
+                  # The ACME server URL
+                server: "{{ certmanager_acme_staging_server }}"
+                  # Email address used for ACME registration
+                email: "{{ certmanager_acme_email }}"
+                  # Name of a secret used to store the ACME account private key (Auto-created, name what you want, must match ingress issuer)
+                privateKeySecretRef:
+                  name: "{{ certmanager_acme_account_priv_key }}"
+                # Enable the DNS-01 challenge provider
+                solvers:
+                - dns01:
+                    cloudflare:
+                      apiTokenSecretRef:
+                        name: "{{ certmanager_cloudflare_api_token_secret_name }}"
+                        key: api-token
+            EOF
+          args:
+            executable: /bin/bash
+        - name: Post-Launch Task ... Get ingress IP to map A record
+          shell: |
+            kubectl describe service/ingress-nginx-controller -n ingress-nginx | grep "LoadBalancer Ingress" | awk '{print $3}'
+          register: nginxingress_a_record_ip
+          args:
+            executable: /bin/bash
+        - name: Post-Launch Task ... Print Ingress IP to user
+          debug:
+            msg: "Certmanager successfuly deployed. Please do the following. Create an A record wherever your domain is hosted and map it to the following IP: www.domain.com -> {{ nginxingress_a_record_ip }}. Also create a CNAME wild card record, * -> www.domainname.com"
+      when: certmanager_alreadydeployed_check.stdout == ""

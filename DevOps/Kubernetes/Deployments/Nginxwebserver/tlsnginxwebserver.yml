@@ -1,0 +1,66 @@
+# Required (Redundant but safe)
+# - import_playbook: ../Longhorn/longhorn.yml # Storage
+# - import_playbook: ../Metallb/metallb.yml # Loadbalancer
+# - import_playbook: ../Nginxingress/nginxingress.yml # Ingress Controller
+# - import_playbook: ../Certmanager/certmanager.yml # Auto TLS
+
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    - name: Pre-Launch Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ nginxwebserver_namespace }} --ignore-not-found
+      register: nginxwebserver_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Pre-Launch Task ... Add Nginxwebserver Repo
+          kubernetes.core.helm_repository:
+            name: "{{ nginxwebserver_chart_name }}"
+            repo_url: "{{ nginxwebserver_helm_chart_url }}"
+        - name: Pre-Launch Task ... Install Nginxwebserver
+          kubernetes.core.helm:
+            name: "{{ nginxwebserver_label }}"
+            namespace: "{{ nginxwebserver_namespace }}"
+            chart_ref: "{{ nginxwebserver_chart_ref }}"
+            create_namespace: true
+            wait: true
+            values:
+              service:
+                type: ClusterIP
+              replicaCount: "{{ nginxwebserver_replicas }}"
+        - name: Post-Launch Task ... Add TLS
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: networking.k8s.io/v1
+            kind: Ingress
+            metadata:
+              name: "{{ nginxwebserver_ingress_label }}"
+              namespace: "{{ nginxwebserver_namespace }}"
+              annotations:
+                cert-manager.io/cluster-issuer: "{{ certmanager_cluster_issuer_name }}"
+            spec:
+              ingressClassName: "{{ globals_ingress_classname }}"
+              tls:
+              - hosts:
+                - "{{ nginxwebserver_prefix_path }}.{{ nginxwebserver_primary_domain }}"
+                secretName:  "{{ nginxwebserver_tls_secretname }}"
+              rules:
+              - host: "{{ nginxwebserver_prefix_path }}.{{ nginxwebserver_primary_domain }}"
+                http:
+                  paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: "{{ nginxwebserver_label }}"
+                        port:
+                          number: 80
+            EOF
+          args:
+            executable: /bin/bash
+      when: nginxwebserver_alreadydeployed_check.stdout == ""

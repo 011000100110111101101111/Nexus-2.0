@@ -1,0 +1,31 @@
+# Required (Redundant but safe)
+- import_playbook: ../Metallb/metallb.yml # Loadbalancer
+
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    - name: Pre-Launch Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ nginxwebserver_namespace }} --ignore-not-found
+      register: nginxwebserver_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Pre-Launch Task ... Add Nginxwebserver Repo
+          kubernetes.core.helm_repository:
+            name: "{{ nginxwebserver_chart_name }}"
+            repo_url: "{{ nginxwebserver_helm_chart_url }}"
+        - name: Pre-Launch Task ... Install Nginxwebserver
+          kubernetes.core.helm:
+            name: "{{ nginxwebserver_label }}"
+            namespace: "{{ nginxwebserver_namespace }}"
+            chart_ref: "{{ nginxwebserver_chart_ref }}"
+            create_namespace: true
+            wait: true
+            values:
+              replicaCount: "{{ nginxwebserver_replicas }}"
+      when: nginxwebserver_alreadydeployed_check.stdout == ""

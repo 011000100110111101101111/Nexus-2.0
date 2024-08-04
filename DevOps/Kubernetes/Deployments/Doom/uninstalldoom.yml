@@ -1,0 +1,23 @@
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  # Make sure to change this
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    # First we ensure Dependencies are met.
+    - name: Pre-Launch Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ doom_namespace }} --ignore-not-found
+      register: doom_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Delete Task ... Remove Namespace
+          shell: |
+            kubectl delete namespace "{{ doom_namespace }}"
+          ignore_errors: yes
+          args:
+            executable: /bin/bash
+      when: doom_alreadydeployed_check.stdout != ""

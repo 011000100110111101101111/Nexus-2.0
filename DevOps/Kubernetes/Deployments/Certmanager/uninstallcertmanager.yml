@@ -1,0 +1,47 @@
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  # Make sure to change this
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    # First we ensure Dependencies are met.
+    - name: Pre-Launch Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ certmanager_namespace }} --ignore-not-found
+      register: certmanager_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Delete Task ... Uninstall Helm Package
+          shell: |
+            helm uninstall "{{ certmanager_label }}" -n "{{ certmanager_namespace }}"
+          ignore_errors: yes
+          args:
+            executable: /bin/bash
+        - name: Delete Task ... Cleanup remaining files
+          shell: |
+            kubectl delete crd \
+            issuers.cert-manager.io \
+            clusterissuers.cert-manager.io \
+            certificates.cert-manager.io \
+            certificaterequests.cert-manager.io \
+            orders.acme.cert-manager.io \
+            challenges.acme.cert-manager.io
+          ignore_errors: yes
+          args:
+            executable: /bin/bash
+        - name: Delete Task ... Remove secrets
+          shell: |
+            kubectl delete secrets --all -n "{{ certmanager_namespace }}"
+          ignore_errors: yes
+          args:
+            executable: /bin/bash
+        - name: Delete Task ... Remove Namespace
+          shell: |
+            kubectl delete namespace "{{ certmanager_namespace }}"
+          ignore_errors: yes
+          args:
+            executable: /bin/bash
+      when: certmanager_alreadydeployed_check.stdout != ""
