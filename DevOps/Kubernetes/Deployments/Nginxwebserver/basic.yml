@@ -1,5 +1,5 @@
 # Required (Redundant but safe)
-- import_playbook: ../Metallb/metallb.yml # Loadbalancer
+- import_playbook: ../Metallb/basic.yml # Loadbalancer
 
 - hosts: masters
   vars_files:

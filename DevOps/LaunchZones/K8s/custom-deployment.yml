@@ -1,0 +1,5 @@
+- import_playbook: ../../Kubernetes/Deployments/BaseCluster/install.yml
+- import_playbook: ../../Kubernetes/Deployments/Metallb/basic.yml
+- import_playbook: ../../Kubernetes/Deployments/Longhorn/basic.yml
+- import_playbook: ../../Kubernetes/Deployments/Nginxingress/basic.yml
+- import_playbook: ../../Kubernetes/Deployments/Certmanager/basic.yml

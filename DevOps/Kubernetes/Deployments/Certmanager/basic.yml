@@ -1,6 +1,6 @@
 # Required Dependencies, no error if already installed.
-- import_playbook: ../Metallb/metallb.yml # Loadbalancer
-- import_playbook: ../Nginxingress/nginxingress.yml # Ingress Controller
+- import_playbook: ../Metallb/basic.yml # Loadbalancer
+- import_playbook: ../Nginxingress/basic.yml # Ingress Controller
 
 - hosts: masters
   vars_files:

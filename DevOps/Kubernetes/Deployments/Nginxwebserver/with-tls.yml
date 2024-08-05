@@ -1,8 +1,7 @@
 # Required (Redundant but safe)
-# - import_playbook: ../Longhorn/longhorn.yml # Storage
-# - import_playbook: ../Metallb/metallb.yml # Loadbalancer
-# - import_playbook: ../Nginxingress/nginxingress.yml # Ingress Controller
-# - import_playbook: ../Certmanager/certmanager.yml # Auto TLS
+- import_playbook: ../Metallb/metallb.yml # Loadbalancer
+- import_playbook: ../Nginxingress/nginxingress.yml # Ingress Controller
+- import_playbook: ../Certmanager/certmanager.yml # Auto TLS
 
 - hosts: masters
   vars_files:
