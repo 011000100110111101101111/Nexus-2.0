@@ -1,0 +1,27 @@
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    - name: Pre-Delete Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ argocd_namespace }} --ignore-not-found
+      register: argocd_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Delete Task ... Delete Argocd
+          shell: |
+            kubectl delete -n "{{ argocd_namespace }}" -f "{{ argocd_manifest_link }}"
+          ignore_errors: yes
+          args:
+            executable: /bin/bash
+        - name: Delete Task ... Deploy Argocd namespace
+          shell: |
+            kubectl delete namespace "{{ argocd_namespace }}"
+          ignore_errors: yes
+          args:
+            executable: /bin/bash
+      when: argocd_alreadydeployed_check.stdout != ""

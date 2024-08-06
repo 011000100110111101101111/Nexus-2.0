@@ -1,0 +1,69 @@
+# Required (Redundant but safe)
+- import_playbook: ../Metallb/basic.yml # Loadbalancer
+
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    - name: Pre-Launch Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ argocd_namespace }} --ignore-not-found
+      register: argocd_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Pre-Launch Task ... Create Argocd Namespace
+          shell: |
+            kubectl create namespace "{{ argocd_namespace }}"
+          args:
+            executable: /bin/bash
+        - name: Pre-Launch Task ... Deploy Argocd
+          shell: |
+            kubectl apply -n argocd -f "{{ argocd_manifest_link }}"
+          args:
+            executable: /bin/bash
+        - name: Post-Launch Task ... Deploy Ingress
+          shell: |
+            kubectl apply -f - <<EOF
+            apiVersion: networking.k8s.io/v1
+            kind: Ingress
+            metadata:
+              name: "{{ argocd_ingress_label }}"
+              namespace: "{{ argocd_namespace }}"
+              annotations:
+                # If using certmanager
+                # Used to provide wildcard domain prefixs to base domain
+                kubernetes.io/tls-acme: "true"
+                # This is clusterissuer you set up with cert-manager
+                cert-manager.io/cluster-issuer: "{{ certmanager_cluster_issuer_name }}"
+                # Disable http
+                kubernetes.io/ingress.allow-http: "false"
+                # Default
+                nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+                nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+                # I needed to add this for it to work
+                nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+            spec:
+              ingressClassName: "{{ globals_ingress_classname }}"
+              rules:
+              - host: "{{ argocd_prefix_path }}.{{ argocd_primary_domain }}"
+                http:
+                  paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: "{{ argocd_service_label }}"
+                        port:
+                          name: https
+              tls:
+                - hosts:
+                  - "{{ argocd_prefix_path }}.{{ argocd_primary_domain }}"
+                  secretName: "{{ argocd_tls_secretname }}"
+            EOF
+          args:
+            executable: /bin/bash
+      when: argocd_alreadydeployed_check.stdout == ""

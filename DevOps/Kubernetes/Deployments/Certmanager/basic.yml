@@ -57,7 +57,7 @@
             spec:
               acme:
                   # The ACME server URL
-                server: "{{ certmanager_acme_staging_server }}"
+                server: "{{ certmanager_acme_production_server }}"
                   # Email address used for ACME registration
                 email: "{{ certmanager_acme_email }}"
                   # Name of a secret used to store the ACME account private key (Auto-created, name what you want, must match ingress issuer)
