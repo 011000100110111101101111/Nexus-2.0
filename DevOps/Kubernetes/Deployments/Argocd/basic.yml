@@ -1,0 +1,28 @@
+# Required (Redundant but safe)
+- import_playbook: ../Metallb/basic.yml # Loadbalancer
+
+- hosts: masters
+  vars_files:
+    - "../../../LaunchZones/K8s/global-config.vars"
+  become: yes # Run as root
+  become_user: "{{ become_user_setting }}"
+  tasks:
+    - name: Pre-Launch Task ... Package already deployed?
+      shell: |
+        kubectl get namespace {{ argocd_namespace }} --ignore-not-found
+      register: argocd_alreadydeployed_check
+      ignore_errors: yes
+      args:
+        executable: /bin/bash
+    - block:
+        - name: Pre-Launch Task ... Create Argocd Namespace
+          shell: |
+            kubectl create namespace "{{ argocd_namespace }}"
+          args:
+            executable: /bin/bash
+        - name: Pre-Launch Task ... Deploy Argocd
+          shell: |
+            kubectl apply -n argocd -f "{{ argocd_manifest_link }}"
+          args:
+            executable: /bin/bash
+      when: argocd_alreadydeployed_check.stdout == ""
