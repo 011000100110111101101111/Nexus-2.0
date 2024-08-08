@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  destination:
+    namespace: dev
+    name: in-cluster
+  project: default
+  source:
+    path: DevOps/Pipelines/Argocd/Apps
+    repoURL: https://github.com/011000100110111101101111/Nexus-2.0
+    targetRevision: HEAD
