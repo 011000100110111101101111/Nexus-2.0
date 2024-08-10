@@ -8,7 +8,7 @@ metadata:
 spec:
   destination:
     namespace: dev
-    name: development-admin@development
+    name: in-cluster
   project: appbundle-project-dev
   source:
     path: DevOps/Pipelines/Argocd/Apps/Dev

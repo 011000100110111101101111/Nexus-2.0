@@ -3,3 +3,4 @@
 - import_playbook: ../../Kubernetes/Deployments/Longhorn/basic.yml
 - import_playbook: ../../Kubernetes/Deployments/Nginxingress/basic.yml
 - import_playbook: ../../Kubernetes/Deployments/Certmanager/basic.yml
+- import_playbook: ../../Kubernetes/Deployments/Argocd/with-tls.yml
