@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-nginx
+  namespace: nginxserver
+  labels:
+    app: simple-nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: simple-nginx
+  template:
+    metadata:
+      labels:
+        app: simple-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simple-nginx-service
+  namespace: nginxserver
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: simple-nginx
+  type: LoadBalancer

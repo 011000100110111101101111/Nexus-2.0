@@ -1,15 +1,15 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-appbundle-app-prod
+  name: root-production-appbundle
   namespace: argocd
   finalizers:
   - resources-finalizer.argocd.argoproj.io
 spec:
   destination:
-    namespace: default
+    namespace: production
     name: in-cluster
-  project: appbundle-project-prod
+  project: production-project
   source:
     path: DevOps/Pipelines/Argocd/Apps/Prod
     repoURL: https://github.com/011000100110111101101111/Nexus-2.0
