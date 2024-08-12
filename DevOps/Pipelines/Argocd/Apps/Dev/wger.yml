@@ -12,7 +12,7 @@ spec:
     helm:
       releaseName: wger
   destination:
-    server: in-cluster
+    name: in-cluster
     namespace: wger
   syncPolicy:
     automated:
