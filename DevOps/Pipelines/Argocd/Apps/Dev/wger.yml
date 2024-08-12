@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: wger
+  namespace: argocd
+spec:
+  project: project-dev
+  source:
+    repoURL: https://wger-project.github.io/helm-charts  # Directly use the provided URL
+    chart: wger
+    targetRevision: 0.2.0  # Specify the version of the chart you want to deploy
+    helm:
+      releaseName: wger
+  destination:
+    server: in-cluster
+    namespace: wger
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
