@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://wger-project.github.io/helm-charts  # Directly use the provided URL
     chart: wger
-    targetRevision: 0.2.0  # Specify the version of the chart you want to deploy
+    targetRevision: 0.1.5  # Specify the version of the chart you want to deploy
     helm:
       releaseName: wger
       values: |
