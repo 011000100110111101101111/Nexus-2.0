@@ -11,6 +11,11 @@ spec:
     targetRevision: 0.2.0  # Specify the version of the chart you want to deploy
     helm:
       releaseName: wger
+      values: |
+        service:
+          type: LoadBalancer
+        persistence:
+          enabled: true
   destination:
     name: in-cluster
     namespace: wger
