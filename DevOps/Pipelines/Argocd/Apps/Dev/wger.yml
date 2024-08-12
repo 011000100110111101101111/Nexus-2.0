@@ -4,7 +4,7 @@ metadata:
   name: wger
   namespace: argocd
 spec:
-  project: project-dev
+  project: appbundle-project-dev
   source:
     repoURL: https://wger-project.github.io/helm-charts  # Directly use the provided URL
     chart: wger
