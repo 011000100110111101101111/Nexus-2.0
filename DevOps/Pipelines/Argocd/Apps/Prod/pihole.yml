@@ -118,7 +118,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: pihole.nexus-core.dev
+  - host: pihole.nexus-core.org
     http:
       paths:
       - path: /admin
@@ -130,7 +130,7 @@ spec:
               name: http
   tls:
     - hosts:
-      - pihole.nexus-core.dev
+      - pihole.nexus-core.org
       secretName: pihole-tls
 ---
 
