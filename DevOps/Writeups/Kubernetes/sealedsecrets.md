@@ -50,9 +50,14 @@ kubectl get pods -A
 # Note the -n homelab for where you want the secret to go when unsealed
 kubectl create secret generic pihole-secret -n homelab --from-literal=password=$(echo -n 'your-password-here' | base64) --dry-run=client -o yaml > pihole-secret.yaml
 
-kubeseal -f pihole-secret.yaml -w sealed-pihole-secret.yaml --format yaml
+# Grab cert from master node to allow deploying to different namespace, sealed-secrets is the name of the sealed-secrets service on master node
+kubeseal --controller-name sealed-secrets --fetch-cert > cert.pem
+
+kubeseal --controller-name sealed-secrets < pihole-secret.yaml --cert cert.pem -o yaml > sealed-pihole-secret.yaml 
+
+# kubeseal -f pihole-secret.yaml -w sealed-pihole-secret.yaml --format yaml
 # If you get error cannot get sealed secret service, it is because you changed the default name of the service. Just go on master node and check the service name. In my case it is sealed-secrets, so you can do the following,
-kubeseal -f pihole-secret.yaml -w sealed-pihole-secret.yaml --controller-name sealed-secrets --format yaml
+# kubeseal -f pihole-secret.yaml -w sealed-pihole-secret.yaml --controller-name sealed-secrets --format yaml
 
 # Now you have a sealed json file that can be normally applied with kubectl apply -f mysealedsecret.yaml . This will then create a normal secret from the spec inside.
 ```
