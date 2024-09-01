@@ -47,8 +47,8 @@ kubectl get pods -A
 
 ## Create a secret locally
 ```bash
-# Note the -n homelab for where you want the secret to go when unsealed
-kubectl create secret generic pihole-secret -n homelab --from-literal=password=$(echo -n 'your-password-here' | base64) --dry-run=client -o yaml > pihole-secret.yaml
+# Note the -n pihole for where you want the secret to go when unsealed
+kubectl create secret generic pihole-secret -n pihole --from-literal=password=$(echo -n 'your-password-here' | base64) --dry-run=client -o yaml > pihole-secret.yaml
 
 # Grab cert from master node to allow deploying to different namespace, sealed-secrets is the name of the sealed-secrets service on master node
 kubeseal --controller-name sealed-secrets --fetch-cert > cert.pem
