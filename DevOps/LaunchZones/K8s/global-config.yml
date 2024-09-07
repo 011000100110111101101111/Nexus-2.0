@@ -114,7 +114,7 @@ doom_replicas: "1"
 doom_image: "ghcr.io/storax/kubedoom:latest"
 doom_primary_domain: "{{ primary_domain_for_ingress }}"
 
-## ================= Jenkins ================= ##
+## ================= Argocd ================= ##
 
 ## ==== Defaults ++
 argocd_name: "argocd-deployment"

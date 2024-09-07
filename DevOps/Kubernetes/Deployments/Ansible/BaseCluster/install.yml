@@ -1,89 +1,119 @@
 ---
-- hosts: all
-  become: yes
+- name: Installation Setup
+  hosts: all
+  become: true
   vars_files:
     - "../../../LaunchZones/K8s/global-config.vars"
   tasks:
-    # - name: Pre-Launch Task ... Package already deployed?
-    #   shell: |
-    #     kubectl get nodes --no-headers | awk '{print $2}' | grep -q 'Ready'
-    #   register: basecluster_exists
-    #   ignore_errors: yes
-    #   args:
-    #     executable: /bin/bash
-    # - name: Pre-Launch Task ... Fail or Pass.
-    #   fail:
-    #     msg: "A cluster appears to be deployed already."
-    #   when: basecluster_exists.rc != 0 or basecluster_exists.stdout == ""
-    - name: Pre-Launch Task ... Install required tools
-      apt:
+    - name: Is there already a deployed kubernetes cluster on host?
+      ansible.builtin.shell: |
+        kubectl get nodes --no-headers | awk '{print $2}' | grep -q 'Ready'
+      register: basecluster_exists
+      ignore_errors: true
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Fail or Pass.
+      ansible.builtin.fail:
+        msg: "A cluster appears to be deployed already."
+      when: basecluster_exists.rc != 0 or basecluster_exists.stdout == ""
+
+    - name: Install required packages
+      ansible.builtin.apt:
         name:
           - ca-certificates
           - curl
           - gnupg
         state: present
-        update_cache: yes
+        update_cache: true
 
-    - name: Pre-Launch Task ... Disable Swap File
-      shell: swapoff -a
+    - name: Disable swap file
+      ansible.builtin.command: swapoff -a
+      changed_when: true
 
-    - name: Pre-Launch Task ... Check if /etc/fstab file exists
-      stat:
+    - name: Check if /etc/fstab file exists
+      ansible.builtin.stat:
         path: /etc/fstab
       register: fstab_file
 
-    - name: Pre-Launch Task ... Remove Swap file from /etc/fstab
-      replace:
+    - name: Remove swap file from /etc/fstab
+      ansible.builtin.replace:
         path: /etc/fstab
         regexp: ".*swap.*"
         replace: ""
       when: fstab_file.stat.exists
 
-    - name: Pre-Launch Task ... Create /etc/modules-load.d/k8s.conf for all worker nodes
-      copy:
+    - name: Create /etc/modules-load.d/k8s.conf for all worker nodes
+      ansible.builtin.copy:
         content: |
           overlay
           br_netfilter
         dest: /etc/modules-load.d/k8s.conf
+        mode: "0644"
 
-    - name: Pre-Launch Task ... Load the modules
-      shell: sudo modprobe overlay && sudo modprobe br_netfilter
-    - name: Pre-Launch Task ... Load the modules
-      modprobe:
+    - name: Check if overlay module is loaded
+      ansible.builtin.shell: lsmod | grep overlay
+      register: overlay_exists
+      ignore_errors: true
+      changed_when: false
+
+    - name: Check if br_netfilter module is loaded
+      ansible.builtin.shell: lsmod | grep br_netfilter
+      register: brnetfilter_exists
+      ignore_errors: true
+      changed_when: false
+
+    - name: Load the modules
+      community.general.modprobe:
         name: "{{ item }}"
       with_items:
         - overlay
         - br_netfilter
-    - name: Pre-Launch Task ... Configure kernel parameters for all nodes
-      sysctl:
+      changed_when: overlay_exists.rc != 0 or brnetfilter_exists.rc != 0
+
+    - name: Configure kernel parameters for all nodes
+      ansible.posix.sysctl:
         name: "{{ item.key }}"
         value: "{{ item.value }}"
-        sysctl_set: yes
+        sysctl_set: true
         state: present
       with_items:
         - { key: "net.bridge.bridge-nf-call-iptables", value: "1" }
         - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
         - { key: "net.ipv4.ip_forward", value: "1" }
 
-    - name: Pre-Launch Task ... Apply the changes
-      shell: sudo sysctl --system
+    - name: Apply the changes
+      ansible.builtin.command: sudo sysctl --system
+      changed_when: false
 
-    - name: Pre-Launch Task ... Set hostname for masters
-      hostname:
+    - name: Set hostname for masters
+      ansible.builtin.hostname:
         name: "k8-master-{{ basecluster_start_index + groups['masters'].index(inventory_hostname) }}"
       when: "'masters' in group_names"
 
-    - name: Pre-Launch Task ... Set hostname for workers
-      hostname:
+    - name: Set hostname for workers
+      ansible.builtin.hostname:
         name: "k8-worker-{{ basecluster_start_index + groups['workers'].index(inventory_hostname) }}"
       when: "'workers' in group_names"
 
-    - name: Pre-Launch Task ... Backup /etc/hosts file (Incase we are updating, or there are existing entries.)
-      shell: mv /etc/hosts /etc/hosts.bak
+    - name: Backup /etc/hosts file (Incase we are updating, or there are existing entries.)
+      ansible.builtin.command: cp /etc/hosts /etc/hosts.bak
       ignore_errors: true
+      changed_when: true
+      register: backup_etc_hosts
 
-    - name: Pre-Launch Task ... Add initial entries to /etc/hosts
-      copy:
+    - name: Backup /etc/hosts file
+      ansible.builtin.copy:
+        src: /etc/hosts
+        dest: /etc/hosts.bak
+        owner: root
+        group: root
+        mode: "0644"
+      changed_when: true
+
+    - name: Add initial entries to /etc/hosts
+      ansible.builtin.copy:
         content: |
           127.0.0.1 localhost
           127.0.1.1 localhost
@@ -97,126 +127,193 @@
 
           # Custom
         dest: /etc/hosts
+        mode: "0644"
 
-    - name: Pre-Launch Task ... Update 127.0.1.1 entry in /etc/hosts
-      replace:
+    - name: Update 127.0.1.1 entry in /etc/hosts
+      ansible.builtin.replace:
         path: /etc/hosts
         regexp: ".*127.0.1.1.*"
         replace: "127.0.1.1 {{ ansible_hostname }}"
 
-    - name: Pre-Launch Task ... Add entries to /etc/hosts for all hosts
-      lineinfile:
-        path: /etc/hosts
+    - name: Add entries to /etc/hosts for all hosts
+      ansible.builtin.lineinfile:
         line: "{{ hostvars[item]['inventory_hostname'] }} {{ hostvars[item]['ansible_hostname'] }}"
-        create: yes
+        dest: /etc/hosts
+        mode: "0644"
+        state: present
       loop: "{{ groups['all'] }}"
       loop_control:
         loop_var: item
 
-    - name: Pre-Launch Task ... Install stuff
-      shell: |
-        apt-get update
-        install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg
-        chmod a+r /etc/apt/keyrings/docker.gpg
-        echo "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-        apt-get update
-        apt update && apt install -y containerd.io
-        containerd config default | tee /etc/containerd/config.toml >/dev/null 2>&1
-        sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
-        systemctl restart containerd && systemctl enable containerd
-        apt update && apt install -y apt-transport-https ca-certificates curl gpg
+    - name: Update apt
+      ansible.builtin.apt:
+        update_cache: true
 
-    - name: Pre-Launch Task ... Install Kubernetes GPG key
-      shell: |
+    #    - name: Install and configure containerd
+    #      ansible.builtin.shell: |
+    #        set -o pipefail
+    #        install -m 0755 -d /etc/apt/keyrings && \
+    #        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg && \
+    #        chmod a+r /etc/apt/keyrings/docker.gpg && \
+    #        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+    #        https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+    #        | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    #        apt-get update && \
+    #        apt update && apt install -y containerd.io && \
+    #        containerd config default | tee /etc/containerd/config.toml >/dev/null 2>&1 && \
+    #        sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml && \
+    #        systemctl restart containerd && systemctl enable containerd && \
+    #        apt update && apt install -y apt-transport-https ca-certificates curl gpg
+    #      changed_when: true
+
+    - name: Create /etc/apt/keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download and install Docker GPG key
+      ansible.builtin.shell: |
+        set -o pipefail
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg
+      changed_when: true
+
+    - name: Set permissions for Docker GPG key
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/docker.gpg
+        mode: "0644"
+
+    - name: Add Docker APT repository
+      ansible.builtin.shell: |
+        set -o pipefail
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+        $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+        | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+      changed_when: true
+
+    - name: Update APT and install containerd
+      ansible.builtin.apt:
+        update_cache: true
+        name: containerd.io
+        state: present
+
+    - name: Configure containerd with SystemdCgroup
+      ansible.builtin.shell: |
+        set -o pipefail
+        containerd config default | tee /etc/containerd/config.toml >/dev/null 2>&1
+        sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+        systemctl restart containerd
+        systemctl enable containerd
+      changed_when: true
+
+    - name: Install Kubernetes GPG key
+      ansible.builtin.shell: |
+        set -o pipefail
         curl -fsSL {{ basecluster_k8s_release_key_url }} | sudo gpg --yes --dearmor -o {{ basecluster_k8s_apt_keyring_path }}
       args:
         executable: /bin/bash
+      changed_when: true
 
     - name: Add Kubernetes repository
-      apt_repository:
+      ansible.builtin.apt_repository:
         repo: deb [signed-by={{ basecluster_k8s_apt_keyring_path }}] {{ basecluster_k8s_signed_by_url }} /
         state: present
         filename: kubernetes.list
 
-    - name: Pre-Launch Task ... Install and mark hold
-      shell: sudo apt update && sudo apt install -y kubelet kubeadm kubectl && sudo apt-mark hold kubelet kubeadm kubectl
+    - name: Install and mark hold
+      ansible.builtin.shell: sudo apt update && sudo apt install -y kubelet kubeadm kubectl && sudo apt-mark hold kubelet kubeadm kubectl
+      changed_when: true
 
 # Ansible playbook to initialize the master node
-- hosts: masters
-  become: yes # Run as root
+- name: Initializing Master Node
+  hosts: masters
+  become: true
+  become_user: "{{ become_user_setting }}"
   vars_files:
     - "../../../LaunchZones/K8s/global-config.vars"
   tasks:
-    - name: Pre-Launch Task ... Install helm
-      shell: snap install helm --classic
-    - name: Pre-Launch Task ... Check if the master node is already initialized
-      stat:
+    - name: Install helm
+      ansible.builtin.command: snap install helm --classic
+      changed_when: true
+
+    - name: Check if the master node is already initialized
+      ansible.builtin.stat:
         path: /etc/kubernetes/admin.conf
       register: kubeadm_init
+
     - name: Initialize the master node
-      command: kubeadm init --pod-network-cidr={{ basecluster_network_cidr }}
-      when: kubeadm_init.stat.exists == false # Only run if the master node is not already initialized
+      ansible.builtin.command: kubeadm init --pod-network-cidr={{ basecluster_network_cidr }}
+      when: not kubeadm_init.stat.exists
+      changed_when: not kubeadm_init.stat.exists
+
     - name: Create .kube directory
-      file:
+      ansible.builtin.file:
         path: /home/{{ become_user_setting }}/.kube
         state: directory
         owner: "{{ become_user_setting }}"
         group: "{{ become_user_setting }}"
-        mode: 0744
-      when: kubeadm_init.stat.exists == false # Only run if the master node is not already initialized
-    - name: Post-Launch Task ... Copy the kube config file
-      copy:
+        mode: "0744"
+      when: not kubeadm_init.stat.exists
+
+    - name: Copy the kube config file
+      ansible.builtin.copy:
         src: /etc/kubernetes/admin.conf
         dest: /home/{{ become_user_setting }}/.kube/config
-        remote_src: yes
+        remote_src: true
         owner: "{{ become_user_setting }}"
         group: "{{ become_user_setting }}"
-        mode: 0644
-      when: kubeadm_init.stat.exists == false # Only run if the master node is not already initialized
-    - name: Post-Launch Task ... Add Calico Repo
+        mode: "0644"
+      when: not kubeadm_init.stat.exists
+      changed_when: not kubeadm_init.stat.exists
+
+    - name: Add Calico Helm Repo
       kubernetes.core.helm_repository:
         name: projectcalico
         repo_url: "{{ basecluster_calico_helm_chart_url }}"
-      become_user: "{{ become_user_setting }}"
-    - name: Post-Launch Task ... Install Calico
+
+    - name: Install Calico
       kubernetes.core.helm:
         name: calico
         namespace: "{{ basecluster_calico_namespace }}"
         chart_ref: "{{ basecluster_calico_chart_ref }}"
         create_namespace: true
         wait: true
-      become_user: "{{ become_user_setting }}"
-    - name: Post-Launch Task ... Get the token for joining the worker nodes
-      become: yes
-      become_user: "{{ become_user_setting }}"
-      shell: kubeadm token create  --print-join-command
+
+    - name: Get the token for joining the worker nodes
+      ansible.builtin.command: kubeadm token create  --print-join-command
       register: kubernetes_join_command
-      when: kubeadm_init.stat.exists == false # Only run if the master node is not already initialized
-    - name: Post-Launch Task ... Display registered output
-      debug:
+      when: not kubeadm_init.stat.exists
+      changed_when: false
+
+    - name: Display registered output
+      ansible.builtin.debug:
         var: kubernetes_join_command.stdout_lines
-      when: kubeadm_init.stat.exists == false # Only run if the master node is not already initialized
-    - name: Post-Launch Task ... Create dummy host to store variable for node config
-      add_host:
+      when: not kubeadm_init.stat.exists
+      changed_when: false
+
+    - name: Create dummy host to store variable for node config
+      ansible.builtin.add_host:
         name: "DUMMY_HOST"
         JOIN_COMMAND: "{{ kubernetes_join_command.stdout_lines[0] }}"
-      when: kubeadm_init.stat.exists == false # Only run if the master node is not already initialized
-    - name: Post-Launch Task ... Change KubeConfig permissions
-      shell: chmod go-r /home/{{ become_user_setting }}/.kube/config
+      when: not kubeadm_init.stat.exists
+      changed_when: false
+
+    - name: Change KubeConfig permissions
+      ansible.builtin.command: chmod go-r /home/{{ become_user_setting }}/.kube/config
+      changed_when: true
 
 # Ansible playbook to join the worker nodes to the cluster
-- hosts: workers
-  become: yes # Run as root
+- name: Join Workers To Node
+  hosts: workers
+  become: true
   tasks:
     - name: Post-Launch Task ... Check if the worker node is already joined
-      stat:
+      ansible.builtin.stat:
         path: /etc/kubernetes/kubelet.conf
       register: kubeadm_already_joined
-    # - name: Post-Launch Task ... Debug Information
-    #   debug:
-    #     var: hostvars['DUMMY_HOST']
+
     - name: Post-Launch Task ... Join the worker nodes to the cluster
-      command: "{{ hostvars['DUMMY_HOST']['JOIN_COMMAND'] }}"
-      become: yes
-      when: kubeadm_already_joined.stat.exists == false # Only run if the worker node is not already joined
+      ansible.builtin.command: "{{ hostvars['DUMMY_HOST']['JOIN_COMMAND'] }}"
+      become: true
+      when: not kubeadm_already_joined.stat.exists
+      changed_when: false

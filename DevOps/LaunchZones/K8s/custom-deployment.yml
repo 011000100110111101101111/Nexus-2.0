@@ -1,6 +1,12 @@
-- import_playbook: ../../Kubernetes/Deployments/BaseCluster/install.yml
-- import_playbook: ../../Kubernetes/Deployments/Metallb/basic.yml
-- import_playbook: ../../Kubernetes/Deployments/Longhorn/basic.yml
-- import_playbook: ../../Kubernetes/Deployments/Nginxingress/basic.yml
-- import_playbook: ../../Kubernetes/Deployments/Certmanager/basic.yml
-- import_playbook: ../../Kubernetes/Deployments/Argocd/with-tls.yml
+- name: Install Base Cluster
+  import_playbook: ../../Kubernetes/Deployments/Ansible/BaseCluster/install.yml
+- name: Install Metallb
+  import_playbook: ../../Kubernetes/Deployments/Ansible/Metallb/basic.yml
+- name: Install Longhorn
+  import_playbook: ../../Kubernetes/Deployments/Ansible/Longhorn/basic.yml
+- name: Install Nginx Ingress Controller
+  import_playbook: ../../Kubernetes/Deployments/Ansible/Nginxingress/basic.yml
+- name: Install Certmanager
+  import_playbook: ../../Kubernetes/Deployments/Ansible/Certmanager/basic.yml
+- name: Install Argocd
+  import_playbook: ../../Kubernetes/Deployments/Ansible/Argocd/with-tls.yml
