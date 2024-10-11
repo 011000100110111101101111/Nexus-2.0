@@ -47,10 +47,10 @@ metadata:
 spec:
   storageClassName: longhorn
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
-      storage: 15Gi
+      storage: 10Gi
 
 ---
 apiVersion: v1
