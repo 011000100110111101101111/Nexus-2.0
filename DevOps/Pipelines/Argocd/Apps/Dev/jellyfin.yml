@@ -1,9 +1,12 @@
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: jellyfin
+  name: jellyfin-deployment
+  labels:
+    app: jellyfin
+  namespace: jellyfin
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: jellyfin
@@ -13,25 +16,29 @@ spec:
         app: jellyfin
     spec:
       containers:
-      - name: jellyfin
-        image: docker.io/jellyfin/jellyfin
-        imagePullPolicy: IfNotPresent
-        name: jellyfin
-        volumeMounts:
-        - mountPath: /data/media
-          name: media
-          readOnly: True
-        - mountPath: /config
-          name: jellyfin-config
+        - name: jellyfin
+          image: jellyfin/jellyfin
+          volumeMounts:
+            - mountPath: /data/media
+              name: media
+            - mountPath: /config
+              name: jellyfin-config
+          resources:
+            requests:
+              memory: "200Mi"
+              cpu: "250m"
+            limits:
+              memory: "500Mi"
+              cpu: "500m"
       volumes:
-      - name: media
-        persistentVolumeClaim:
-          claimName: jellyfin-media-longhorn-claim
-      - name: jellyfin-config
-        persistentVolumeClaim:
-          claimName: jellyfin-config-longhorn-claim
----
+        - name: media
+          persistentVolumeClaim:
+            claimName: jellyfin-media-longhorn-claim
+        - name: jellyfin-config
+          persistentVolumeClaim:
+            claimName: jellyfin-config-longhorn-claim
 
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -46,7 +53,6 @@ spec:
       storage: 15Gi
 
 ---
-
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -61,7 +67,6 @@ spec:
       storage: 5Gi
 
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
@@ -73,13 +78,12 @@ spec:
   selector:
     app: jellyfin
   ports:
-  - name: http
-    port: 8096
-    protocol: TCP
-    targetPort: 8096
+    - name: http
+      port: 8096
+      protocol: TCP
+      targetPort: 8096
 
 ---
-
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -99,17 +103,17 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: jellyfin.nexus-core.dev
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: jellyfin-service
-            port:
-              name: http
+    - host: jellyfin.nexus-core.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jellyfin-service
+                port:
+                  name: http
   tls:
     - hosts:
-      - jellyfin.nexus-core.dev
+        - jellyfin.nexus-core.dev
       secretName: jellyfin-tls
