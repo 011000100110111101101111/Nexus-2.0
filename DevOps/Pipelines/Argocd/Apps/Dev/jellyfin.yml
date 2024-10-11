@@ -1,0 +1,115 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jellyfin
+spec:
+  selector:
+    matchLabels:
+      app: jellyfin
+  template:
+    metadata:
+      labels:
+        app: jellyfin
+    spec:
+      containers:
+      - name: jellyfin
+        image: docker.io/jellyfin/jellyfin
+        imagePullPolicy: IfNotPresent
+        name: jellyfin
+        volumeMounts:
+        - mountPath: /data/media
+          name: media
+          readOnly: True
+        - mountPath: /config
+          name: jellyfin-config
+      volumes:
+      - name: media
+        persistentVolumeClaim:
+          claimName: jellyfin-media-longhorn-claim
+      - name: jellyfin-config
+        persistentVolumeClaim:
+          claimName: jellyfin-config-longhorn-claim
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-media-longhorn-claim
+  namespace: jellyfin
+spec:
+  storageClassName: longhorn
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-config-longhorn-claim
+  namespace: jellyfin
+spec:
+  storageClassName: longhorn
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-service
+  labels:
+    app: jellyfin
+  namespace: jellyfin
+spec:
+  selector:
+    app: jellyfin
+  ports:
+  - name: http
+    port: 8096
+    protocol: TCP
+    targetPort: 8096
+
+---
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jellyfin-ingress
+  namespace: jellyfin
+  annotations:
+    # If using certmanager
+    # Used to provide wildcard domain prefixs to base domain
+    kubernetes.io/tls-acme: "true"
+    # This is clusterissuer you set up with cert-manager
+    cert-manager.io/cluster-issuer: development-issuer
+    # Default
+    #nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    #nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    # I needed to add this for it to work
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: jellyfin.nexus-core.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: jellyfin-service
+            port:
+              name: http
+  tls:
+    - hosts:
+      - jellyfin.nexus-core.dev
+      secretName: jellyfin-tls
